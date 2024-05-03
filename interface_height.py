@@ -4,11 +4,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 sim = pmio.MusicSim.from_dump_dir(
-    "/home/al1007/music/tests_out/runs/2dim/rayleigh_taylor/output",  # Changer le chemin d'accès
+    "/home/al1007/newfcdir/frames",
     [
         pmio.ReflectiveArrayBC(),
         pmio.PeriodicArrayBC(),
-    ],  # Changer les conditions aux bords
+    ],
 )
 
 data = sim.big_array(verbose=True)
@@ -31,7 +31,8 @@ def h_interface(image):
         else:
             X_M[i] = 2 * (1 - X[i])
     m_l = sum(X_M) * dz
-    height_z = image_data[H - 1] - image_data[0]
+    height_z = image.labels_along_axis("x1")[H - 1] - image.labels_along_axis("x1")[0]
+    print(X_M)
     return height_z - m_l
 
 

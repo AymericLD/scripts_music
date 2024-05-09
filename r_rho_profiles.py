@@ -2,6 +2,8 @@ import pymusic
 import pymusic.io as pmio
 import numpy as np
 import matplotlib.pyplot as plt
+from music_scripts.musicdata import MusicData
+
 
 from __future__ import annotations
 
@@ -27,21 +29,17 @@ temp_0 = 293
 beta = 1 / mu_top
 alpha = temp_0
 
+pressure=IdealMixEos.(c_top,density,temp)
+
+
+
 # Simulation Results
 
-sim = pmio.MusicSim.from_dump_dir(
-    "/home/al1007/music/tests_out/runs/2dim/rayleigh_taylor/output",  # Changer le chemin d'accès
-    [
-        pmio.ReflectiveArrayBC(),
-        pmio.PeriodicArrayBC(),
-    ],  # Changer les conditions aux bords
-)
+mdat = MusicData("/home/al1007/newfcdir/params.nml")
 
 # Local R_rho computation
 
-data = sim.big_array(verbose=True)
-times = data.labels_along_axis("time")
-profiles = data.xs("scalar_1", axis="var").mean("x2")
+array = mdat[-1].rprof["scalar_1"].array()[::-1]
 
 def r_rho(image):
     

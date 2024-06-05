@@ -95,3 +95,102 @@ def height_interface(model: Model_CDF) -> Height_Interface_Fit:
     )
 
     return height_interface_fit
+
+
+class Model_CDF(ABC):
+    """Model of the CDF profile of the scalar"""
+
+    scalar_profile: NDArray
+    cum_dib: NDArray
+    box_height: int
+    total_scalar_composition: float
+    space: NDArray
+
+    @staticmethod
+    def fromsnap(snap: Snap) -> Model_CDF: ...
+
+    @abstractmethod
+    def CDF_profile(self, z: NDArray) -> NDArray: ...
+
+
+class Model_scalar(ABC):
+    """Model of the scalar profile"""
+
+    @abstractmethod
+    def scalar_profile(self, z: NDArray) -> NDArray: ...
+
+
+def error_1(snap: Snap, fit_strategy: Model_CDF) -> NDArray:
+    model = fit_strategy.fromsnap(snap)
+    cum_dib = model.cum_dib
+    fit = np.zeros(len(cum_dib))
+    norm_2 = np.zeros(len(cum_dib))
+    for i in range(len(cum_dib)):
+        h = model.space[i]
+        fit = model.CDF_profile(model.space, h)
+        norm_2[i] = np.sum((fit - cum_dib) ** 2)
+
+    return norm_2
+
+
+def error_2(snap: Snap, fit_strategy: Model_CDF) -> NDArray:
+    model = fit_strategy.fromsnap(snap)
+    cum_dib = model.cum_dib
+    fit = np.zeros(len(cum_dib))
+    norm_2 = np.array([np.zeros(len(cum_dib)) for i in range(100)])
+    for j in range(0, 100):
+        a = j / 1000
+        for i in range(len(cum_dib)):
+            h = model.space[i]
+            fit = model.CDF_profile(model.space, h, a)
+        norm_2[j, i] = np.sum((fit - cum_dib) ** 2)
+
+    return norm_2
+
+plt.plot(space, error_1(snap, ContinuousScalarFit))
+plt.contour(space, a, error_2(snap, DiscontinuousScalarFit))
+print(error_2(snap, DiscontinuousScalarFit))
+a = np.linspace(0, 0.1, 100)
+
+def height_interface(self) -> Height_Interface_Fit:
+        parameters = int(self.fit_parameters)
+        popt, pcov = curve_fit(
+            lambda z, *parameters: self.CDF_profile(z, *parameters),
+            self.space,
+            self.cum_dib,
+        )
+
+        fit = self.CDF_profile(self.space, *popt)
+
+        height_interface = popt[0]
+
+        norm2 = np.sum((fit - self.cum_dib) ** 2)
+
+        height_interface_fit = Height_Interface_Fit(
+            height_interface=height_interface, fit=fit, norm2=norm2
+        )
+
+        return height_interface_fit
+
+def height_interface(self) -> Height_Interface_Fit:
+        popt, pcov = curve_fit(
+            self.CDF_profile,
+            self.space,
+            self.cum_dib,
+            p0=self.initial_guess,
+            bounds=self.bounds(),
+        )
+
+        fit = self.CDF_profile(self.space, *popt)
+
+        height_interface = popt[0]
+
+        norm2 = np.sum((fit - self.cum_dib) ** 2)
+
+        height_interface_fit = Height_Interface_Fit(
+            height_interface=height_interface, fit=fit, norm2=norm2
+        )
+
+        return height_interface_fit
+
+

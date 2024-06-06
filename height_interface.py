@@ -20,7 +20,7 @@ class FitStrategy(ABC):
 
     # Profile to fit with
     @abstractmethod
-    def predicted_values(z: NDArray, H: float, C: float, h: float, *args: float): ...
+    def predicted_values(z: NDArray, h: float, *args: float): ...
 
     def curve_fit_kwargs(self) -> dict[str, object]:
         return {
@@ -127,41 +127,66 @@ class Height_Interface_Fit:
     def misfit(self) -> NDArray:
         return (self.fit_profile - self.values) ** 2
 
-    @cached_property
-    def norm2_misfit(self, *args: float) -> float:
-        profile = self.fit_strategy.predicted_values(self.space, *args)
+    def norm2_misfit(self, h: float, *args: float) -> float:
+        profile = self.fit_strategy.predicted_values(self.space, h, *args)
         return np.sum((profile - self.values) ** 2)
 
     @cached_property
     def plot_norm2_misfit(self) -> None:
-        fit_parameters = self.fit_parameters()
-        width = 100
+        fit_parameters = self.fit_parameters
+        print(fit_parameters)
+        width = (
+            1 * fit_parameters
+        )  # Proportion of the fit_parameters range to look at for the misfit error
+        left_width = 0.3 * fit_parameters
+        right_width = 1.5 * fit_parameters
+        nb_test_points = 10
         parameters = []
         for i in range(len(fit_parameters)):
             parameters.append(
                 np.linspace(
-                    fit_parameters[i] - width, fit_parameters[i] + width, 2 * width + 1
+                    np.abs(fit_parameters[i] - left_width[i]),
+                    fit_parameters[i] + right_width[i],
+                    2 * nb_test_points + 1,
                 )
             )
         # The number of parameters for the fit is assumed to be either one or two
         if len(fit_parameters) == 1:
             plt.figure()
             norm2 = np.array(
-                self.norm2_misfit(fit_parameters[0][i])
-                for i in range(len(fit_parameters[0]))
+                [self.norm2_misfit(parameters[0][i]) for i in range(len(parameters[0]))]
             )
-            plt.plot(self.space, norm2)
+            plt.plot(parameters[0], norm2)
             plt.savefig("norm2_error.png")
         else:
+            # Contour Plot of norm2_error
             plt.figure()
-            norm2 = np.array(shape=(2 * width + 1, 2 * width + 1))
-            for j in range(len(fit_parameters[1])):
-                for i in range(len(fit_parameters[0])):
-                    norm2[i][j] = self.norm2_misfit(
-                        fit_parameters[0][i], fit_parameters[1][j]
-                    )
-            # cs = plt.contourf(fit_parameters[0],fit_parameters[1],norm2)
-            # plt.savefig("norm2_error.png")
+            norm2 = np.zeros((2 * nb_test_points + 1, 2 * nb_test_points + 1))
+            for j in range(len(parameters[1])):
+                for i in range(len(parameters[0])):
+                    norm2[i][j] = self.norm2_misfit(parameters[0][i], parameters[1][j])
+            X, Y = np.meshgrid(parameters[0], parameters[1])
+            plt.figure()
+            cs = plt.contourf(X, Y, norm2)
+            plt.colorbar(cs)
+            plt.xlabel("h")
+            plt.ylabel("a")
+            plt.title("Contour Plot of norm2_error")
+            plt.savefig("norm2_error.png")
+
+            # Plot of norm2(h) with a fixed
+
+            plt.figure()
+            norm2 = np.array(
+                [
+                    self.norm2_misfit(parameters[0][i], fit_parameters[1])
+                    for i in range(len(parameters[0]))
+                ]
+            )
+            plt.plot(parameters[0], norm2)
+            print(norm2.argmin())
+            print(parameters[0])
+            plt.savefig("norm2_error_h.png")
 
     @property
     def height_interface(self) -> float:
@@ -212,3 +237,4 @@ plt.figure()
 plt.plot(space, cum_dib)
 plt.plot(space, CDF_fit_profile)
 plt.savefig("test.png")
+CDF_fit.plot_norm2_misfit

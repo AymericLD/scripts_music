@@ -193,4 +193,93 @@ def height_interface(self) -> Height_Interface_Fit:
 
         return height_interface_fit
 
+@dataclass(frozen=True)
+class LinearScalarFit(FitStrategy):
+    """Fit of cumulative distribution of the scalar profile (subtracted from the top value)
+    using a linear profile for the convective zone and a parabola for the stable zone"""
 
+    box_height: float
+    total_scalar_composition: float
+
+    def predicted_values(
+        self,
+        z: NDArray,
+        h: float,
+        a: float,
+        m: float,
+    ) -> NDArray:
+        b = (self.total_scalar_composition - m * h) / (self.box_height - h) - a * (
+            self.box_height + h
+        )
+        c = -a * h**2 - b * h + m * h
+        mask = z > h
+        result = np.zeros_like(z)
+        result[mask] = a * z[mask] ** 2 + b * z[mask] + c
+        result[~mask] = m * z[~mask]
+        return result
+
+    def bounds(self, H: float, constraint=0.05):
+        bounds = (0, [H, constraint])
+        return bounds
+
+
+@dataclass(frozen=True)
+class Linear2ScalarFit(FitStrategy):
+    """Fit of cumulative distribution of the scalar profile (subtracted from the top value)
+    using a linear profile for the convective zone and a parabola for the stable zone"""
+
+    box_height: float
+    total_scalar_composition: float
+
+    def predicted_values(
+        self,
+        z: NDArray,
+        h: float,
+        m: float,
+    ) -> NDArray:
+        a = (self.total_scalar_composition - m * h) / (self.box_height - h) ** 2 + m / (
+            h - self.box_height
+        )
+        b = (self.total_scalar_composition - m * h) / (self.box_height - h) - a * (
+            self.box_height + h
+        )
+        c = -a * h**2 - b * h + m * h
+        mask = z > h
+        result = np.zeros_like(z)
+        result[mask] = a * z[mask] ** 2 + b * z[mask] + c
+        result[~mask] = m * z[~mask]
+        return result
+
+    def bounds(self, H: float, constraint=0.05):
+        bounds = (0, [H, constraint])
+        return bounds
+
+
+if isinstance(self.fit_strategy, LinearScalarFit):
+
+def interface(
+    mdat: MusicData, fit_strategy: FitStrategy
+) -> tuple[NDArray, NDArray, FitStrategy]:
+    data = mdat.big_array
+    times = data.labels_along_axis("time")[1:]
+    height_interfaces = []
+    for snap in mdat[1:]:
+        fit = Height_Interface_Fit.fromsnap(snap, fit_strategy)
+        height_interfaces.append(fit.height_interface)
+    height_interfaces = np.array(height_interfaces)
+
+    return (times, height_interfaces)
+
+
+def plot_height_interfaces_comparison(H: tuple[NDArray, NDArray, FitStrategy]) -> None:
+    comparison = np.sqrt(H[0])
+    comparison *= H[1][-1] / comparison[-1]
+    plt.figure()
+    plt.plot(H[0], H[1])
+    plt.plot(H[0], comparison)
+    strategy_type = type(H[2])
+    directory = "/z2/users/al1007/figures/height_interfaces/"
+    plt.savefig(f"{directory}height_interface_evolution_with{strategy_type}.png")
+
+
+# plt.savefig("height_interfaces.png")

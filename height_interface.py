@@ -156,8 +156,8 @@ class Height_Interface_Fit:
         width = (
             1 * fit_parameters
         )  # Proportion of the fit_parameters range to look at for the misfit error
-        left_width = 0.3 * fit_parameters
-        right_width = 2 * fit_parameters
+        left_width = 2 * fit_parameters
+        right_width = 4 * fit_parameters
         nb_test_points = 50
         parameters = []
         for i in range(len(fit_parameters)):
@@ -341,10 +341,10 @@ fit_strategy = [LinearScalarFit, ContinuousScalarFit, DiscontinuousScalarFit]
 
 # Tests for a given snap
 
-snap = mdat[50]
-CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy[0])
+snap = mdat[20]
+CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy[2])
 CDF_fit.plot_fit_comparison
-CDF_fit.plot_zoom_fit_comparison(0, 5)
+CDF_fit.plot_zoom_fit_comparison(0, 2)
 
 # Height of the interface for the simulation
 

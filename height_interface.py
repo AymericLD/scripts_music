@@ -8,6 +8,10 @@ from music_scripts.musicdata import MusicData, Snap
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
+from lmfit import Model
+import time
+
+start_time_specific = time.time()
 
 
 if typing.TYPE_CHECKING:
@@ -80,7 +84,8 @@ class DiscontinuousScalarFit(FitStrategy):
 @dataclass(frozen=True)
 class LinearScalarFit(FitStrategy):
     """Fit of cumulative distribution of the scalar profile (subtracted from the top value)
-    allowing the scalar to be discontinuous at the interface"""
+    using linear profile in the convective region and a quadratic profile in the stable region, allowing
+    the scalar to be discontinuous at the interface"""
 
     box_height: float
     total_scalar_composition: float
@@ -153,7 +158,7 @@ class Height_Interface_Fit:
         )  # Proportion of the fit_parameters range to look at for the misfit error
         left_width = 0.3 * fit_parameters
         right_width = 2 * fit_parameters
-        nb_test_points = 10
+        nb_test_points = 50
         parameters = []
         for i in range(len(fit_parameters)):
             parameters.append(
@@ -332,16 +337,23 @@ class Height_Interfaces:
 # Simulation results
 
 mdat = MusicData("/z2/users/al1007/fuentes/params.nml")
-fit_strategy = ContinuousScalarFit
+fit_strategy = [LinearScalarFit, ContinuousScalarFit, DiscontinuousScalarFit]
 
 # Tests for a given snap
 
-snap = mdat[20]
-CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy)
+snap = mdat[50]
+CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy[0])
 CDF_fit.plot_fit_comparison
 CDF_fit.plot_zoom_fit_comparison(0, 5)
 
 # Height of the interface for the simulation
 
-# height_interfaces = Height_Interfaces(mdat, fit_strategy)
+# height_interfaces = Height_Interfaces(mdat, fit_strategy[0])
 # height_interfaces.plot_height_interfaces_comparison
+
+end_time_specific = time.time()
+
+execution_time_specific = end_time_specific - start_time_specific
+print(
+    f"Durée d'exécution de la partie spécifique : {execution_time_specific:.2f} secondes"
+)

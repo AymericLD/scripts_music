@@ -6,62 +6,16 @@ import numpy as np
 from scipy.optimize import curve_fit
 from music_scripts.musicdata import MusicData
 
-# # Option originale
-
-# def func(x, a, h, H, C):
-#     b = C / (H - h) - a * (H + h)
-#     c = -a * h**2 - b * h
-#     result = np.zeros(len(x))
-#     for i in range(len(x)):
-#         if x[i] > h:
-#             result[i] = a * x[i] ** 2 + b * x[i] + c
-#     return result
+# Option originale
 
 
-# def height_interface(snap):
-#     array = snap.rprof["scalar_1"].array()[::-1]
-#     cum_dib = np.cumsum(array - array[0])
-
-#     norm_2 = np.zeros(len(cum_dib) - 200)
-#     opt = np.zeros(len(cum_dib) - 200)
-#     space = snap.grid.grids[0].cell_points()
-#     H = space[len(array) - 1]
-#     C = cum_dib[len(cum_dib) - 1]
-
-#     for i in range(len(space) - 200):
-#         h = space[i]
-#         popt, pcov = curve_fit(
-#             lambda x, a: func(
-#                 x,
-#                 a,
-#                 h,
-#                 H,
-#                 C,
-#             ),
-#             space,
-#             cum_dib,
-#             bounds=(-0.05, 0.05),
-#         )
-#         fit = func(space, popt[0], h, H, C)
-#         opt[i] = popt[0]
-#         norm_2[i] = np.sum((fit - cum_dib) ** 2)
-
-#     fit = func(space, opt[norm_2.argmin()], space[norm_2.argmin()], H, C)
-
-#     # return space[norm_2.argmin()]
-#     return fit
-
-# Option suggérée par Thomas
-
-
-def func(z, h, H, C):
-    a = C / (h - H) ** 2
+def func(x, a, h, H, C):
     b = C / (H - h) - a * (H + h)
     c = -a * h**2 - b * h
-    result = np.zeros(len(z))
-    for i in range(len(z)):
-        if z[i] > h:
-            result[i] = a * z[i] ** 2 + b * z[i] + c
+    result = np.zeros(len(x))
+    for i in range(len(x)):
+        if x[i] > h:
+            result[i] = a * x[i] ** 2 + b * x[i] + c
     return result
 
 
@@ -69,28 +23,76 @@ def height_interface(snap):
     array = snap.rprof["scalar_1"].array()[::-1]
     cum_dib = np.cumsum(array - array[0])
 
+    norm_2 = np.zeros(len(cum_dib) - 200)
+    opt = np.zeros(len(cum_dib) - 200)
     space = snap.grid.grids[0].cell_points()
     H = space[len(array) - 1]
     C = cum_dib[len(cum_dib) - 1]
 
-    popt, pcov = curve_fit(
-        lambda z, h: func(
-            z,
-            h,
-            H,
-            C,
-        ),
-        space,
-        cum_dib,
-    )
+    for i in range(len(space) - 200):
+        h = space[i]
+        popt, pcov = curve_fit(
+            lambda x, a: func(
+                x,
+                a,
+                h,
+                H,
+                C,
+            ),
+            space,
+            cum_dib,
+            bounds=(-0.05, 0.05),
+        )
+        fit = func(space, popt[0], h, H, C)
+        opt[i] = popt[0]
+        norm_2[i] = np.sum((fit - cum_dib) ** 2)
 
-    fit = func(space, popt[0], H, C)
-    print(popt[0])
+    fit = func(space, opt[norm_2.argmin()], space[norm_2.argmin()], H, C)
 
-    h_index = np.argmin(np.abs(space - popt[0]))
-    print(cum_dib[h_index])
-
+    # return space[norm_2.argmin()]
     return fit
+
+
+# # Option suggérée par Thomas
+
+
+# def func(z, h, H, C):
+#     a = C / (h - H) ** 2
+#     b = C / (H - h) - a * (H + h)
+#     c = -a * h**2 - b * h
+#     result = np.zeros(len(z))
+#     for i in range(len(z)):
+#         if z[i] > h:
+#             result[i] = a * z[i] ** 2 + b * z[i] + c
+#     return result
+
+
+# def height_interface(snap):
+#     array = snap.rprof["scalar_1"].array()[::-1]
+#     cum_dib = np.cumsum(array - array[0])
+
+#     space = snap.grid.grids[0].cell_points()
+#     H = space[len(array) - 1]
+#     C = cum_dib[len(cum_dib) - 1]
+
+#     popt, pcov = curve_fit(
+#         lambda z, h: func(
+#             z,
+#             h,
+#             H,
+#             C,
+#         ),
+#         space,
+#         cum_dib,
+#     )
+
+#     fit = func(space, popt[0], H, C)
+#     print(popt[0])
+
+#     h_index = np.argmin(np.abs(space - popt[0]))
+#     print(cum_dib[h_index])
+
+#     return fit
 
 
 # # Option intermédiaire
@@ -205,7 +207,7 @@ def moving_average(interfaces):
     return smooth_interfaces
 
 
-mdat = MusicData("/home/al1007/newfcdir/params.nml")
+mdat = MusicData("/z2/users/al1007/fuentes/params.nml")
 
 
 # # Interface Height
@@ -214,40 +216,47 @@ data = mdat.big_array
 times = data.labels_along_axis("time")[1:]
 
 
-# height_interfaces = [height_interface(snap) for snap in mdat[1:]]
-# # height_interfaces_smooth = moving_average(height_interfaces)
+height_interfaces = [height_interface(snap) for snap in mdat[1:]]
+# height_interfaces_smooth = moving_average(height_interfaces)
 
-# comparison_1 = np.sqrt(times)
+comparison_1 = np.sqrt(times)
 
-# comparison_1 *= height_interfaces[-1] / comparison_1[-1]
-
-# plt.figure()
-# plt.plot(times, height_interfaces)
-# plt.plot(times, comparison_1)
-
-
-# plt.savefig("height_interfaces.png")
-
-h_interfaces = [h_interface(snap) for snap in mdat[1:]]
-
-comparison_2 = np.sqrt(times)
-
-comparison_2 *= h_interfaces[-1] / comparison_2[-1]
+comparison_1 *= height_interfaces[-1] / comparison_1[-1]
 
 plt.figure()
-plt.plot(times, h_interfaces)
-plt.plot(times, comparison_2)
+plt.plot(times, height_interfaces)
+plt.plot(times, comparison_1)
 
-plt.savefig("h_interfaces.png")
+
+plt.savefig("height_interfaces.png")
+
+Attention avant de relancer ! 
+
+Traceback (most recent call last):
+  File "/z2/users/al1007/scripts_music/cabot_cook.py", line 224, in <module>
+    comparison_1 *= height_interfaces[-1] / comparison_1[-1]
+ValueError: operands could not be broadcast together with shapes (844,) (512,) (844,) 
+
+# h_interfaces = [h_interface(snap) for snap in mdat[1:]]
+
+# comparison_2 = np.sqrt(times)
+
+# comparison_2 *= h_interfaces[-1] / comparison_2[-1]
+
+# plt.figure()
+# plt.plot(times, h_interfaces)
+# plt.plot(times, comparison_2)
+
+# plt.savefig("h_interfaces.png")
 
 # # Tests
 
-# snap = mdat[320]
-# array = snap.rprof["scalar_1"].array()[::-1]
-# cum_dib = np.cumsum(array - array[0])
-# space = snap.grid.grids[0].cell_points()
+snap = mdat[550]
+array = snap.rprof["scalar_1"].array()[::-1]
+cum_dib = np.cumsum(array - array[0])
+space = snap.grid.grids[0].cell_points()
 
-# plt.figure()
-# plt.plot(space, cum_dib)
-# plt.plot(space, height_interface(snap))
-# plt.savefig("test.png")
+plt.figure()
+plt.plot(space, cum_dib)
+plt.plot(space, height_interface(snap))
+plt.savefig("test_cb.png")

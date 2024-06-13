@@ -11,7 +11,7 @@ from functools import cached_property
 from lmfit import Model
 import time
 
-start_time_specific = time.time()
+start_time = time.time()
 
 
 if typing.TYPE_CHECKING:
@@ -197,6 +197,17 @@ class Height_Interface_Fit:
                 fit_parameters[2],
             ]
 
+        # # Third step
+        # h = fit_parameters[0]
+        # popt, pcov = curve_fit(
+        #     lambda z, a, m: self.fit_strategy.predicted_values(z, h, a, m),
+        #     self.space,
+        #     self.values,
+        #     # **self.fit_strategy.curve_fit_kwargs(),
+        # )
+        # fit_parameters[1] = popt[0]
+        # fit_parameters[2] = popt[1]
+
         return fit_parameters
 
     @cached_property
@@ -325,13 +336,13 @@ class Height_Interfaces:
     ) -> None:
         H = self.interface
         comparison = np.sqrt(H[0])
-        comparison *= H[1][-1] / comparison[-1]
+        comparison *= H[1][400] / comparison[400]
         plt.figure()
         plt.plot(H[0], H[1])
         plt.plot(H[0], comparison)
         strategy_type = str(self.fit_strategy)
         directory = "/z2/users/al1007/figures/height_interfaces/"
-        plt.savefig(f"{directory}height_interface_evolution_with{strategy_type}.png")
+        plt.savefig(f"{directory}1height_interface_evolution_with{strategy_type}.png")
 
 
 # Simulation results
@@ -341,19 +352,18 @@ fit_strategy = [LinearScalarFit, ContinuousScalarFit, DiscontinuousScalarFit]
 
 # Tests for a given snap
 
-snap = mdat[20]
-CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy[2])
+snap = mdat[500]
+CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy[0])
 CDF_fit.plot_fit_comparison
 CDF_fit.plot_zoom_fit_comparison(0, 2)
 
 # Height of the interface for the simulation
 
-# height_interfaces = Height_Interfaces(mdat, fit_strategy[0])
-# height_interfaces.plot_height_interfaces_comparison
+height_interfaces = Height_Interfaces(mdat, fit_strategy[0])
+height_interfaces.plot_height_interfaces_comparison
 
-end_time_specific = time.time()
+end_time = time.time()
 
-execution_time_specific = end_time_specific - start_time_specific
-print(
-    f"Durée d'exécution de la partie spécifique : {execution_time_specific:.2f} secondes"
-)
+execution_time = end_time - start_time
+
+print(f"Execution time : {execution_time:.2f} seconds")

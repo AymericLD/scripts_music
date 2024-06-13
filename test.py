@@ -64,9 +64,9 @@ def interface(
     mdat: MusicData,
 ) -> tuple[NDArray, NDArray]:
     data = mdat.big_array
-    times = data.labels_along_axis("time")[1:]
+    times = data.labels_along_axis("time")[1:600]
     height_interfaces = []
-    for snap in mdat[1:]:
+    for snap in mdat[1:600]:
         array = snap.rprof["scalar_1"].array()[::-1]
         cum_dib = np.cumsum(array - array[0])
         space = snap.grid.grids[0].cell_points()

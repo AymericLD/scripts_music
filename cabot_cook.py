@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 from music_scripts.musicdata import MusicData
+import time
+
+start_time = time.time()
+
 
 # Option originale
 
@@ -49,8 +53,8 @@ def height_interface(snap):
 
     fit = func(space, opt[norm_2.argmin()], space[norm_2.argmin()], H, C)
 
-    # return space[norm_2.argmin()]
-    return fit
+    return space[norm_2.argmin()]
+    # return fit
 
 
 # # Option suggérée par Thomas
@@ -230,12 +234,6 @@ plt.plot(times, comparison_1)
 
 plt.savefig("height_interfaces.png")
 
-Attention avant de relancer ! 
-
-Traceback (most recent call last):
-  File "/z2/users/al1007/scripts_music/cabot_cook.py", line 224, in <module>
-    comparison_1 *= height_interfaces[-1] / comparison_1[-1]
-ValueError: operands could not be broadcast together with shapes (844,) (512,) (844,) 
 
 # h_interfaces = [h_interface(snap) for snap in mdat[1:]]
 
@@ -260,3 +258,9 @@ plt.figure()
 plt.plot(space, cum_dib)
 plt.plot(space, height_interface(snap))
 plt.savefig("test_cb.png")
+
+end_time = time.time()
+
+execution_time = end_time - start_time
+
+print(f"Execution time : {execution_time:.2f} seconds")

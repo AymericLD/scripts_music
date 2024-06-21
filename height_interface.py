@@ -29,7 +29,7 @@ class FitStrategy(ABC):
     def curve_fit_kwargs(self) -> dict[str, object]:
         return {
             # "bounds": (0.5, 6),
-            "initial_guess": [7, 0.05],
+            # "p0": [17],
         }
 
 
@@ -111,6 +111,11 @@ class LinearScalarFit(FitStrategy):
         bounds = (0, [H, constraint])
         return bounds
 
+    def curve_fit_kwargs(self) -> dict[str, object]:
+        return {
+            "p0": [17, 5e-4, 1e-4],
+        }
+
 
 @dataclass(frozen=True)
 class Height_Interface_Fit:
@@ -143,70 +148,13 @@ class Height_Interface_Fit:
 
     @cached_property
     def fit_parameters(self) -> list[float]:
-        # First step
         popt, pcov = curve_fit(
             self.fit_strategy.predicted_values,
             self.space,
             self.values,
-            # **self.fit_strategy.curve_fit_kwargs(),
+            **self.fit_strategy.curve_fit_kwargs(),
         )
         fit_parameters = popt
-
-        # Second step
-        width = (
-            1 * fit_parameters
-        )  # Proportion of the fit_parameters range to look at for the misfit error
-        left_width = 2 * fit_parameters
-        right_width = 4 * fit_parameters
-        nb_test_points = 50
-        parameters = []
-        for i in range(len(fit_parameters)):
-            parameters.append(
-                np.linspace(
-                    np.abs(fit_parameters[i] - left_width[i]),
-                    fit_parameters[i] + right_width[i],
-                    2 * nb_test_points + 1,
-                )
-            )
-        # The number of parameters for the fit is assumed to be either one,two or three
-        if len(fit_parameters) == 1:
-            norm2 = np.array(
-                [self.norm2_misfit(parameters[0][i]) for i in range(len(parameters[0]))]
-            )
-            fit_parameters = [parameters[0][norm2.argmin()]]
-        elif len(fit_parameters) == 2:
-            norm2 = np.array(
-                [
-                    self.norm2_misfit(parameters[0][i], fit_parameters[1])
-                    for i in range(len(parameters[0]))
-                ]
-            )
-            fit_parameters = [parameters[0][norm2.argmin()], fit_parameters[1]]
-        else:
-            norm2 = np.array(
-                [
-                    self.norm2_misfit(
-                        parameters[0][i], fit_parameters[1], fit_parameters[2]
-                    )
-                    for i in range(len(parameters[0]))
-                ]
-            )
-            fit_parameters = [
-                parameters[0][norm2.argmin()],
-                fit_parameters[1],
-                fit_parameters[2],
-            ]
-
-        # # Third step
-        # h = fit_parameters[0]
-        # popt, pcov = curve_fit(
-        #     lambda z, a, m: self.fit_strategy.predicted_values(z, h, a, m),
-        #     self.space,
-        #     self.values,
-        #     # **self.fit_strategy.curve_fit_kwargs(),
-        # )
-        # fit_parameters[1] = popt[0]
-        # fit_parameters[2] = popt[1]
 
         return fit_parameters
 
@@ -336,34 +284,38 @@ class Height_Interfaces:
     ) -> None:
         H = self.interface
         comparison = np.sqrt(H[0])
-        comparison *= H[1][400] / comparison[400]
+        comparison *= H[1][-1] / comparison[-1]
         plt.figure()
         plt.plot(H[0], H[1])
         plt.plot(H[0], comparison)
         strategy_type = str(self.fit_strategy)
         directory = "/z2/users/al1007/figures/height_interfaces/"
-        plt.savefig(f"{directory}1height_interface_evolution_with{strategy_type}.png")
+        plt.savefig(f"{directory}height_interface_evolution_with{strategy_type}.png")
 
 
-# Simulation results
+def main() -> None:
+    # Simulation results
+    mdat = MusicData("/z2/users/al1007/fuentes/params.nml")
+    fit_strategy = [LinearScalarFit, ContinuousScalarFit, DiscontinuousScalarFit]
 
-mdat = MusicData("/z2/users/al1007/fuentes/params.nml")
-fit_strategy = [LinearScalarFit, ContinuousScalarFit, DiscontinuousScalarFit]
+    # Tests for a given snap
 
-# Tests for a given snap
+    snap = mdat[500]
+    CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy[0])
+    CDF_fit.plot_fit_comparison
+    CDF_fit.plot_zoom_fit_comparison(0, 2)
 
-snap = mdat[500]
-CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy[0])
-CDF_fit.plot_fit_comparison
-CDF_fit.plot_zoom_fit_comparison(0, 2)
+    # Height of the interface for the simulation
 
-# Height of the interface for the simulation
+    height_interfaces = Height_Interfaces(mdat, fit_strategy[0])
+    height_interfaces.plot_height_interfaces_comparison
 
-height_interfaces = Height_Interfaces(mdat, fit_strategy[0])
-height_interfaces.plot_height_interfaces_comparison
+    end_time = time.time()
 
-end_time = time.time()
+    execution_time = end_time - start_time
 
-execution_time = end_time - start_time
+    print(f"Execution time : {execution_time:.2f} seconds")
 
-print(f"Execution time : {execution_time:.2f} seconds")
+
+if __name__ == "__main__":
+    main()

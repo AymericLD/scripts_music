@@ -283,3 +283,48 @@ def plot_height_interfaces_comparison(H: tuple[NDArray, NDArray, FitStrategy]) -
 
 
 # plt.savefig("height_interfaces.png")
+
+# # Second step
+        # width = (
+        #     1 * fit_parameters
+        # )  # Proportion of the fit_parameters range to look at for the misfit error
+        # left_width = 2 * fit_parameters
+        # right_width = 4 * fit_parameters
+        # nb_test_points = 50
+        # parameters = []
+        # for i in range(len(fit_parameters)):
+        #     parameters.append(
+        #         np.linspace(
+        #             np.abs(fit_parameters[i] - left_width[i]),
+        #             fit_parameters[i] + right_width[i],
+        #             2 * nb_test_points + 1,
+        #         )
+        #     )
+        # # The number of parameters for the fit is assumed to be either one,two or three
+        # if len(fit_parameters) == 1:
+        #     norm2 = np.array(
+        #         [self.norm2_misfit(parameters[0][i]) for i in range(len(parameters[0]))]
+        #     )
+        #     fit_parameters = [parameters[0][norm2.argmin()]]
+        # elif len(fit_parameters) == 2:
+        #     norm2 = np.array(
+        #         [
+        #             self.norm2_misfit(parameters[0][i], fit_parameters[1])
+        #             for i in range(len(parameters[0]))
+        #         ]
+        #     )
+        #     fit_parameters = [parameters[0][norm2.argmin()], fit_parameters[1]]
+        # else:
+        #     norm2 = np.array(
+        #         [
+        #             self.norm2_misfit(
+        #                 parameters[0][i], fit_parameters[1], fit_parameters[2]
+        #             )
+        #             for i in range(len(parameters[0]))
+        #         ]
+        #     )
+        #     fit_parameters = [
+        #         parameters[0][norm2.argmin()],
+        #         fit_parameters[1],
+        #         fit_parameters[2],
+        #     ]

@@ -30,32 +30,29 @@ if typing.TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class SuperAdiabaticStateAtHSE(MusicStateOnGrid):
-    dist_to_ledoux_gradient: float  # in [0,1]
-    scalar_1_field: ScalarField
+class LedouxStateAtHSE(MusicStateOnGrid):
+    R_0: float
     temp_0: float
     c_top: float
     delta_mu: float
     rho_0: float
     gravity: float
-    grid: Grid
+    on_grid: Grid
     eos: IdealMixEos
+    prandtl: float
+    lewis: float
 
     @property
     def grid(self) -> Grid:
-        return self.grid
+        return self.on_grid
+
+    def __post_init__(self) -> None:
+        if not (0 <= self.R_0 <= (self.prandtl + self.lewis) / (self.prandtl + 1)):
+            raise ValueError("Setup might be too stable or already unstable")
 
     @cached_property
     def mu_top(self) -> float:
         return self.eos.mu_mix(np.asarray(self.c_top)).item()
-
-    @cached_property
-    def mu_profile(self) -> NDArray:
-        return self.eos.mu_mix(self.scalar_1_field)
-
-    @cached_property
-    def dmu_dz(self) -> NDArray:
-        return np.gradient(self.mu_profile)
 
     @cached_property
     def P_0(self) -> float:
@@ -63,54 +60,56 @@ class SuperAdiabaticStateAtHSE(MusicStateOnGrid):
         return P
 
     @cached_property
-    def boundary_conditions(self) -> tuple[float, float]:
-        bc = [self.temp_0, self.P_0]
+    def boundary_conditions(self) -> tuple[float, float, float]:
+        bc = [self.temp_0, self.P_0, self.mu_top]
         return bc
 
-    # RHS of the ODE for the temperature and pressure initial profiles (along z) ; y=[temp,press]
+    # RHS of the ODE for the temperature, pressure and molecular weight initial profiles (along z) ; y=[temp,press,mu]
 
-    def RHS_ODE(self, z: float, y: NDArray) -> tuple[float, float]:
+    # z is the depth !
+
+    def RHS_ODE(self, z: float, y: NDArray) -> tuple[float, float, float]:
+        dmu_dz = self.delta_mu / self.grid.length
         dT_dz = (
-            self.dist_to_ledoux_gradient
-            * self.gravity
-            * y[1]
-            * self.dmu_dz[z]
-            / self.mu_profile[z]
-            - (self.gravity / self.eos.r_gas)
-            * self.mu_profile[z]
+            self.R_0 * y[0] * dmu_dz / y[2]
+            + (self.gravity / self.eos.r_gas)
+            * y[2]
             * (self.eos.gamma - 1)
             / self.eos.gamma
         )
-        dP_dz = -(self.gravity / self.eos.r_gas) * self.mu_profile[z] * y[2] / y[1]
-        return (dT_dz, dP_dz)
+        dP_dz = (self.gravity / self.eos.r_gas) * y[2] * y[1] / y[0]
+        return (dT_dz, dP_dz, dmu_dz)
 
-    # Solving the coupled ODEs for the temperature, pressure  and density profiles
+    # Solving the coupled ODEs for the temperature, pressure, molecular weight and density profiles
 
-    def solve_TP(self) -> tuple[NDArray, NDArray, NDArray]:
+    @property
+    def solve_TP(self) -> tuple[NDArray, NDArray, NDArray, NDArray]:
         bc = self.boundary_conditions
         z_span = [0, self.grid.length]
-        z = np.linspace(0, self.grid.length, self.grid.ncells)
+        z = self.grid.walls
         sol = solve_ivp(self.RHS_ODE, z_span, bc, t_eval=z)
-        temp_profile = sol.y[0]
-        press_profile = sol.y[1]
-        density_profile = self.eos.density(self.mu_profile, press_profile, temp_profile)
-        return (temp_profile, press_profile, density_profile)
+        temp_profile = sol.y[0, ::-1]
+        press_profile = sol.y[1, ::-1]
+        mu_profile = sol.y[2, ::-1]
+        c_profile = self.eos.c1_from_mu(mu_profile)
+        density_profile = self.eos.density(c_profile, press_profile, temp_profile)
+        return (temp_profile, press_profile, c_profile, density_profile)
 
     @cached_property
     def density(self) -> CenteredScalar:
-        return CenteredScalar(self.grid, self.solve_TP[2])
+        return CenteredScalar.lininterp_from_walls(self.grid, self.solve_TP[3])
 
     @cached_property
     def temperature(self) -> CenteredScalar:
-        return CenteredScalar(self.grid, self.solve_TP[0])
+        return CenteredScalar.lininterp_from_walls(self.grid, self.solve_TP[0])
 
     @cached_property
     def pressure(self) -> CenteredScalar:
-        return CenteredScalar(self.grid, self.solve_TP[1])
+        return CenteredScalar.lininterp_from_walls(self.grid, self.solve_TP[1])
 
     @cached_property
     def scalars(self) -> Sequence[CenteredScalar]:
-        return (self.scalar_1_field.on_grid(self.grid),)
+        return (CenteredScalar.lininterp_from_walls(self.grid, self.solve_TP[2]),)
 
     @cached_property
     def csound(self) -> CenteredScalar:
@@ -133,9 +132,109 @@ class SuperAdiabaticStateAtHSE(MusicStateOnGrid):
 
 
 @dataclass(frozen=True)
-class FuentesSuperAdiabaticSetup(PhysicalSetup):
-    """Fuentes & Cumming Setup with an initial temperature gradient that is Scwharzschild unstable and Ledoux stable"""
+class SuperAdiabaticStateAtHSE(MusicStateOnGrid):
+    R_0: float
+    temp_0: float
+    c_top: float
+    sur_adiab: float
+    rho_0: float
+    gravity: float
+    on_grid: Grid
+    eos: IdealMixEos
+    prandtl: float
+    lewis: float
 
+    @property
+    def grid(self) -> Grid:
+        return self.on_grid
+
+    def __post_init__(self) -> None:
+        if not (0 <= self.R_0 <= (self.prandtl + self.lewis) / (self.prandtl + 1)):
+            raise ValueError("Setup might be too stable or already unstable")
+
+    @cached_property
+    def mu_top(self) -> float:
+        return self.eos.mu_mix(np.asarray(self.c_top)).item()
+
+    @cached_property
+    def P_0(self) -> float:
+        P = self.rho_0 * self.eos.r_gas * self.temp_0 / self.mu_top
+        return P
+
+    @cached_property
+    def boundary_conditions(self) -> tuple[float, float, float]:
+        bc = [self.temp_0, self.P_0, self.mu_top]
+        return bc
+
+    # RHS of the ODE for the temperature, pressure and molecular weight initial profiles (along z) ; y=[temp,press,mu]
+
+    # z is the depth !
+
+    def RHS_ODE(self, z: float, y: NDArray) -> tuple[float, float, float]:
+        dT_dz = (y[2] * self.gravity / self.eos.r_gas) * (
+            self.sur_adiab * (self.eos.gamma - 1) / self.eos.gamma
+        )
+        dP_dz = (self.gravity / self.eos.r_gas) * y[2] * y[1] / y[0]
+        dmu_dz = (self.gravity / (self.R_0 * self.eos.r_gas)) * (y[2] ** 2) / y[0]
+        return (dT_dz, dP_dz, dmu_dz)
+
+    # Solving the coupled ODEs for the temperature, pressure, molecular weight and density profiles
+
+    @property
+    def solve_TP(self) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+        bc = self.boundary_conditions
+        z_span = [0, self.grid.length]
+        z = self.grid.walls
+        sol = solve_ivp(self.RHS_ODE, z_span, bc, t_eval=z)
+        temp_profile = sol.y[0, ::-1]
+        press_profile = sol.y[1, ::-1]
+        mu_profile = sol.y[2, ::-1]
+        c_profile = self.eos.c1_from_mu(mu_profile)
+        density_profile = self.eos.density(c_profile, press_profile, temp_profile)
+        return (temp_profile, press_profile, c_profile, density_profile)
+
+    @cached_property
+    def density(self) -> CenteredScalar:
+        return CenteredScalar.lininterp_from_walls(self.grid, self.solve_TP[3])
+
+    @cached_property
+    def temperature(self) -> CenteredScalar:
+        return CenteredScalar.lininterp_from_walls(self.grid, self.solve_TP[0])
+
+    @cached_property
+    def pressure(self) -> CenteredScalar:
+        return CenteredScalar.lininterp_from_walls(self.grid, self.solve_TP[1])
+
+    @cached_property
+    def scalars(self) -> Sequence[CenteredScalar]:
+        return (CenteredScalar.lininterp_from_walls(self.grid, self.solve_TP[2]),)
+
+    @cached_property
+    def csound(self) -> CenteredScalar:
+        vals = self.eos.csound(
+            self.scalars[0].at_centers_gc, self.temperature.at_centers_gc
+        )
+        return CenteredScalar(grid=self.grid, at_centers_gc=vals)
+
+    @cached_property
+    def e_int(self) -> CenteredScalar:
+        vals = self.eos.energy_internal(
+            self.scalars[0].at_centers_gc, self.temperature.at_centers_gc
+        )
+        return CenteredScalar(grid=self.grid, at_centers_gc=vals)
+
+    @cached_property
+    def heat_capacity_vol(self) -> CenteredScalar:
+        vals = self.eos.heat_capacity_vol(self.scalars[0].at_centers_gc)
+        return CenteredScalar(grid=self.grid, at_centers_gc=vals)
+
+
+@dataclass(frozen=True)
+class FuentesLedouxSetup(PhysicalSetup):
+    """Fuentes & Cumming Setup with an initial temperature gradient that is Scwharzschild unstable and Ledoux stable, the molecular weight spatial
+    gradient being fixed constant"""
+
+    R_0: float
     rayleigh: float
     prandtl: float
     lewis: float
@@ -147,7 +246,6 @@ class FuentesSuperAdiabaticSetup(PhysicalSetup):
     delta_mu: float
     F0_Fcrit: float
     eos: IdealMixEos
-    scalar_setup: ScalarField
     timescale: Timescale
 
     @cached_property
@@ -186,42 +284,49 @@ class FuentesSuperAdiabaticSetup(PhysicalSetup):
     def delta_t(self) -> float:
         return self.flux_top * self.geom.length_scale() / self.conductivity
 
+    @cached_property
+    def boundary_conditions(self):
+        bc_rho_bot = bcs.Cont1()
+        bc_rho_top = bcs.Cont1()
+        bc_e_bot = bcs.Fluxc1(value=0.0)
+        bc_e_top = bcs.Fluxc1(value=self.flux_top)
+        bc_scalar_bot = bcs.Neumann(value=0.0)
+        bc_scalar_top = bcs.Neumann(value=0.0)
+
+        return [
+            bc_rho_bot,
+            bc_rho_top,
+            bc_e_bot,
+            bc_e_top,
+            bc_scalar_bot,
+            bc_scalar_top,
+        ]
+
     def on_grid(self, ncells: int) -> ConcreteSetup:
         grid, grid_horiz = self.geom.grids(ncells)
-        return ConcreteDDSuperAdiabaticSetup(
+        return ConcreteDDLedouxSetup(
             physics=self,
             grid_horiz=grid_horiz,
-            discrete_state=SuperAdiabaticStateAtHSE(
-                dist_to_ledoux_gradient=0.1,  # in [0,1]
-                scalar_1_field=self.scalar_setup,
+            discrete_state=LedouxStateAtHSE(
+                R_0=self.R_0,
                 temp_0=self.temp_0,
                 c_top=self.c_top,
                 delta_mu=self.delta_mu,
                 rho_0=self.rho_0,
                 gravity=self.gravity,
-                grid=grid,
+                on_grid=grid,
                 eos=self.eos,
-                bc_rho_bot=bcs.Cont1(),
-                bc_rho_top=bcs.Cont1(),
-                bc_e_bot=bcs.Fluxc1(value=0.0),
-                bc_e_top=bcs.Fluxc1(value=self.flux_top),
-                bc_scalar_bot=bcs.Neumann(value=0.0),
-                bc_scalar_top=bcs.Neumann(value=0.0),
+                prandtl=self.prandtl,
+                lewis=self.lewis,
             ),
         )
 
 
 @dataclass(frozen=True)
-class ConcreteDDSuperAdiabaticSetup(ConcreteSetup):
-    physics: FuentesSuperAdiabaticSetup
+class ConcreteDDLedouxSetup(ConcreteSetup):
+    physics: FuentesLedouxSetup
     grid_horiz: Grid
     discrete_state: MusicStateOnGrid
-    bc_rho_top: Bc
-    bc_rho_bot: Bc
-    bc_e_top: Bc
-    bc_e_bot: Bc
-    bc_scalar_top: Bc
-    bc_scalar_bot: Bc
 
     def create_dump(self, path: Path) -> None:
         path.parent.mkdir(exist_ok=True, parents=True)
@@ -261,14 +366,18 @@ class ConcreteDDSuperAdiabaticSetup(ConcreteSetup):
         physics.eos.update_nml(nml)
         physics.timescale.update_nml(nml)
 
-        self.bc_rho_bot.update_nml(nml, Boundary.BOTTOM, BCVar.DENSITY)
-        self.bc_rho_top.update_nml(nml, Boundary.TOP, BCVar.DENSITY)
+        bc_rho_bot, bc_rho_top, bc_e_bot, bc_e_top, bc_scalar_bot, bc_scalar_top = (
+            self.physics.boundary_conditions
+        )
 
-        self.bc_e_bot.update_nml(nml, Boundary.BOTTOM, BCVar.E_INT)
-        self.bc_e_top.update_nml(nml, Boundary.TOP, BCVar.E_INT)
+        bc_rho_bot.update_nml(nml, Boundary.BOTTOM, BCVar.DENSITY)
+        bc_rho_top.update_nml(nml, Boundary.TOP, BCVar.DENSITY)
 
-        self.bc_scalar_bot.update_nml(nml, Boundary.BOTTOM, BCVar.SCALAR_1)
-        self.bc_scalar_top.update_nml(nml, Boundary.TOP, BCVar.SCALAR_1)
+        bc_e_bot.update_nml(nml, Boundary.BOTTOM, BCVar.E_INT)
+        bc_e_top.update_nml(nml, Boundary.TOP, BCVar.E_INT)
+
+        bc_scalar_bot.update_nml(nml, Boundary.BOTTOM, BCVar.SCALAR_1)
+        bc_scalar_top.update_nml(nml, Boundary.TOP, BCVar.SCALAR_1)
 
     def diagnostics(self, out_path: Path) -> None:
         physics = self.physics
@@ -350,7 +459,8 @@ class ConcreteDDSuperAdiabaticSetup(ConcreteSetup):
 
 
 def main() -> None:
-    setup = FuentesSuperAdiabaticSetup(
+    setup = FuentesLedouxSetup(
+        R_0=1e-3,
         rayleigh=1e12,
         prandtl=0.1,
         lewis=0.1,
@@ -369,7 +479,7 @@ def main() -> None:
     ).on_grid(ncells=512)
 
     run_dir = job.RunDir(
-        path=Path("15fuentes"),
+        path=Path("16fuentes"),
         params_in=Path("params_zk.nml"),
     )
     task = job.PrepareDir(force=True) & job.PrintInfo()

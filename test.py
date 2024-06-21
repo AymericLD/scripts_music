@@ -3,7 +3,6 @@ from __future__ import annotations
 import typing
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.optimize import curve_fit
 from music_scripts.musicdata import MusicData, Snap
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -64,9 +63,9 @@ def interface(
     mdat: MusicData,
 ) -> tuple[NDArray, NDArray]:
     data = mdat.big_array
-    times = data.labels_along_axis("time")[1:600]
+    times = data.labels_along_axis("time")[1:]
     height_interfaces = []
-    for snap in mdat[1:600]:
+    for snap in mdat[1:]:
         array = snap.rprof["scalar_1"].array()[::-1]
         cum_dib = np.cumsum(array - array[0])
         space = snap.grid.grids[0].cell_points()
@@ -74,7 +73,7 @@ def interface(
         total_scalar_composition = cum_dib[len(cum_dib) - 1]
         model = Model(predicted_values)
         params = model.make_params(
-            C=total_scalar_composition, H=box_height, h=10, a=5e-4, m=1e-4
+            C=total_scalar_composition, H=box_height, h=17, a=5e-4, m=1e-4
         )
         params["C"].vary = False
         params["H"].vary = False

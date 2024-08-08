@@ -8,9 +8,15 @@ from music_scripts.musicdata import MusicData, Snap
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
+import time
+from physicsimu import PhysicsSimu
+
+start_time = time.time()
+
 
 if typing.TYPE_CHECKING:
     from numpy.typing import NDArray
+    from pymusic.big_array import BigArray
 
 
 class FitStrategy(ABC):
@@ -46,6 +52,11 @@ class ContinuousScalarFit(FitStrategy):
         result[mask] = a * z[mask] ** 2 + b * z[mask] + c
         return result
 
+    def curve_fit_kwargs(self) -> dict[str, object]:
+        return {
+            "p0": [17],
+        }
+
 
 @dataclass(frozen=True)
 class DiscontinuousScalarFit(FitStrategy):
@@ -73,6 +84,11 @@ class DiscontinuousScalarFit(FitStrategy):
     def bounds(self, H: float, constraint=0.05):
         bounds = (0, [H, constraint])
         return bounds
+
+    def curve_fit_kwargs(self) -> dict[str, object]:
+        return {
+            "p0": [17, 5e-4],
+        }
 
 
 @dataclass(frozen=True)
@@ -126,6 +142,9 @@ class Height_Interface_Fit:
         array = snap.rprof["scalar_1"].array()[::-1]
         cum_dib = np.cumsum(array - array[0])
         space = snap.grid.grids[0].cell_points()
+        # to modify
+        if abs(space[0]) > 0.1:
+            space = space - space[0]
         box_height = space[len(array) - 1]
         total_scalar_composition = cum_dib[len(cum_dib) - 1]
         fit = Height_Interface_Fit(
@@ -137,7 +156,6 @@ class Height_Interface_Fit:
                 box_height=box_height, total_scalar_composition=total_scalar_composition
             ),
         )
-
         return fit
 
     @cached_property
@@ -232,11 +250,10 @@ class Height_Interface_Fit:
         plt.plot(self.space, self.values)
         plt.plot(self.space, CDF_fit_profile)
         strategy_type = type(self.fit_strategy)
-        directory = "filepath"
-        plt.savefig(f"{directory}comparison{strategy_type}.png")
+        plt.savefig(f"{filepath}comparison{strategy_type}.png")
 
     def plot_zoom_fit_comparison(
-        self, initial_position: float, final_position: float
+        self, initial_position: float, final_position: float, filepath: str
     ) -> NDArray:
         beginning = round(initial_position * len(self.space) / self.box_height)
         end = round(final_position * len(self.space) / self.box_height)
@@ -247,7 +264,32 @@ class Height_Interface_Fit:
         plt.plot(truncated_space, cum_dib_truncated)
         plt.plot(truncated_space, CDF_fit_profile_truncated)
         strategy_type = type(self.fit_strategy)
-        directory = "filepath"
         plt.savefig(
-            f"{directory}zoom_comparison_{initial_position}to{final_position}{strategy_type}.png"
+            f"{filepath}zoom_comparison_{initial_position}to{final_position}{strategy_type}.png"
         )
+
+
+def main() -> None:
+    # Simulation results
+
+    simu_number = "9fuentes"
+    mdat = MusicData(f"{simu_number}/params.nml")
+    filepath = f"{simu_number}/figures/tests_fits/"
+    fit_strategy = [LinearScalarFit, ContinuousScalarFit, DiscontinuousScalarFit]
+
+    # Tests for a given snap
+
+    snap = mdat[500]
+    CDF_fit = Height_Interface_Fit.fromsnap(snap, fit_strategy[0])
+    CDF_fit.plot_fit_comparison(filepath)
+    CDF_fit.plot_zoom_fit_comparison(0, 13, filepath)
+
+    end_time = time.time()
+
+    execution_time = end_time - start_time
+
+    print(f"Execution time : {execution_time:.2f} seconds")
+
+
+if __name__ == "__main__":
+    main()

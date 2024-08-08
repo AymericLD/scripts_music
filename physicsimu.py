@@ -22,7 +22,7 @@ if typing.TYPE_CHECKING:
 
     from numpy.typing import NDArray
     from pymusic.big_array import BigArray
-    from typing import Any, Mapping, Tuple
+    from typing import Any, Mapping, Tuple, Union
 
 
 @FieldGetter.register
@@ -39,7 +39,7 @@ class PhysicsSimu:
         return (
             self.alpha
             * self.gravity
-            * self.geometrical_parameters[1] ** 4
+            * self.get_geom_parameter("radial_extension") ** 4
             * self.flux_top
         ) / (self.diff_th**2 * self.prandtl * self.conductivity)
 
@@ -82,7 +82,7 @@ class PhysicsSimu:
 
     @cached_property
     def rho_0(self) -> float:
-        density_profile = self.mdat[0].rprof["density"].array()
+        density_profile = self.mdat[1].rprof["density"].array()
         rho_0 = np.average(density_profile)
         return rho_0
 
@@ -90,14 +90,14 @@ class PhysicsSimu:
 
     @cached_property
     def alpha(self) -> NDArray:
-        temp_profile = self.mdat[0].rprof["temp"].array()
+        temp_profile = self.mdat[1].rprof["temp"].array()
         return 1 / temp_profile[-1]
 
     # beta is assumed to be constant and the eos is an ideal gas mix
 
     @cached_property
     def beta(self) -> NDArray:
-        comp_profile = self.mdat[0].rprof["scalar_1"].array()
+        comp_profile = self.mdat[1].rprof["scalar_1"].array()
         if isinstance(self.mdat.eos, IdealGasMix2):
             mu_profile = self.mdat.eos._mu(comp_profile)
         return 1 / mu_profile[-1]
@@ -111,49 +111,76 @@ class PhysicsSimu:
 
     @cached_property
     def mu_gradient(self) -> NDArray:
-        comp_profile = self.mdat[0].rprof["scalar_1"].array()
+        comp_profile = self.mdat[1].rprof["scalar_1"].array()
+        space = self.mdat[0].grid.grids[0].cell_points()
         if isinstance(self.mdat.eos, IdealGasMix2):
             mu_profile = self.mdat.eos._mu(comp_profile)
-        dmu_dz = np.gradient(mu_profile)
-        return np.abs(dmu_dz[round(self.geometrical_parameters[0] / 2)])
+        dmu_dz = np.diff(mu_profile) / np.diff(space)
+        return np.abs(dmu_dz[int(len(dmu_dz) / 2)])
 
     @cached_property
-    def geometrical_parameters(self) -> Tuple[float, float, float]:
+    def F_crit(self) -> NDArray:
+        k = self.conductivity
+        alpha = self.alpha
+        beta = self.beta
+        gradient_mu = self.mu_gradient
+        return k * gradient_mu * beta / alpha
+
+    @cached_property
+    def geometrical_parameters(self) -> dict:
         grid = self.mdat.grid
         n_cells = grid.shape_cells[0]  # direction x1 ?
+        parameters = {"n_cells": n_cells}
+
         if isinstance(grid, CartesianGrid2D):
-            height = grid.x_grid.span()
-            width = grid.y_grid.span()
-            return (n_cells, height, width)
-        if isinstance(grid, SphericalGrid2D):
-            radius = grid.r_grid.span()
-            angular_aperture = grid.theta_grid.span()
-            return (n_cells, radius, angular_aperture)
+            parameters.update(
+                {
+                    "radial_extension": grid.x_grid.span(),
+                    "orthoradial_extension": grid.y_grid.span(),
+                    "dx1": grid.x_grid.cell_widths(),
+                    "dx2": grid.y_grid.cell_widths(),
+                }
+            )
+
+        elif isinstance(grid, SphericalGrid2D):
+            parameters.update(
+                {
+                    "radial_extension": grid.r_grid.span(),
+                    "orthoradial_extension": grid.theta_grid.span(),
+                    "dx1": grid.r_grid.cell_widths(),
+                    "dx2": grid.theta_grid.cell_widths(),
+                }
+            )
+
+        return parameters
+
+    def get_geom_parameter(self, parameter_name: str) -> float | None | NDArray:
+        parameters = self.geometrical_parameters
+        return parameters.get(parameter_name)
 
     @cached_property
-    def global_R0(self) -> float:
-        comp_profile = self.mdat[0].rprof["scalar_1"].array()
-        if isinstance(self.mdat.eos, IdealGasMix2):
-            mu_profile = self.mdat.eos._mu(comp_profile)
-        temp_profile = self.mdat[0].rprof["temp"].array()
-        delta_t = temp_profile[-1] - temp_profile[0]
-        delta_mu = mu_profile[-1] - mu_profile[0]
-        # return self.alpha * delta_t / (self.beta * delta_mu)
-        return 1
-
-    @cached_property
-    def average_resolution_thermal_bl(self) -> Tuple[float, float, float]:
+    def average_resolution_thermal_bl(self) -> dict:
         deltat_Hconv = 1 / (self.rayleigh * self.prandtl) ** (1 / 4)
-        delta_t = deltat_Hconv * self.geometrical_parameters[1]
+        delta_t = deltat_Hconv * self.get_geom_parameter("radial_extension")
         resolution = (
-            self.geometrical_parameters[0] * delta_t / self.geometrical_parameters[1]
+            self.get_geom_parameter("n_cells")
+            * delta_t
+            / self.get_geom_parameter("radial_extension")
         )
-        return (delta_t, deltat_Hconv, resolution)
+        return {
+            "delta_t": delta_t,
+            "deltat_Hconv": deltat_Hconv,
+            "resolution": resolution,
+        }
+
+    def get_resolution_parameter(self, parameter_name: str) -> float | None:
+        resolution = self.average_resolution_thermal_bl
+        return resolution.get(parameter_name)
 
     @cached_property
     def pressure_scale_height(self) -> float:
-        press_profile = self.mdat[0].rprof["press"].array()
-        density_profile = self.mdat[0].rprof["density"].array()
+        press_profile = self.mdat[1].rprof["press"].array()
+        density_profile = self.mdat[1].rprof["density"].array()
         P_avg = np.average(press_profile)
         density_avg = np.average(density_profile)
         H_P = P_avg / (density_avg * self.gravity)
@@ -162,16 +189,16 @@ class PhysicsSimu:
     @cached_property
     def print_diagnostics(self) -> None:
         print(
-            "The average number of cells over the thermal boundary layer is ",
-            self.average_resolution_thermal_bl[2],
+            "The number of cells over the thermal boundary layer is ",
+            self.get_resolution_parameter("resolution"),
         )
         print(
             "The ratio between the size of the thermal boundary layer and the size of the box is",
-            self.average_resolution_thermal_bl[1],
+            self.get_resolution_parameter("deltat_Hconv"),
         )
         print(
             "The average ratio between the size of the box and the pressure scale height is",
-            self.geometrical_parameters[0] / self.pressure_scale_height,
+            self.get_geom_parameter("radial_extension") / self.pressure_scale_height,
         )
 
 

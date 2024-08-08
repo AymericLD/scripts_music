@@ -3,7 +3,9 @@ from __future__ import annotations
 import typing
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import curve_fit
 from music_scripts.musicdata import MusicData, Snap
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
 import time
@@ -39,10 +41,7 @@ class Height_Interfaces:
             / (Physics.rho_0 * Physics.cp)
         )
         B = 1 / np.sqrt(Physics.beta * Physics.mu_gradient)
-        # return A * B
-        C = np.sqrt(2 * 3.4e-3 * 7152 / (1.025 * 4.182e7))
-        D = 1 / np.sqrt(5.5e-2 * 6.6e-4)
-        return C * D
+        return A * B
 
     @property
     def interface(self) -> tuple[NDArray, NDArray]:
@@ -64,21 +63,7 @@ class Height_Interfaces:
         plt.plot(H[0], H[1])
         plt.plot(H[0], comparison)
         strategy_type = str(self.fit_strategy)
-        directory = filepath
-        plt.savefig(f"{directory}height_interface_evolution_with{strategy_type}.png")
-
-    @property
-    def diagnostics(self) -> None:
-        Physics = self.physics
-        print(Physics.global_R0)
-        print(Physics.alpha)
-        print(Physics.flux_top)
-        print(Physics.rho_0)
-        print(Physics.cp)
-        print(Physics.beta)
-        print(Physics.mu_gradient)
-        print(self.numerical_factor)
-        return
+        plt.savefig(f"{filepath}height_interface_evolution_with{strategy_type}.png")
 
 
 def main() -> None:
@@ -100,10 +85,6 @@ def main() -> None:
     height_interfaces.plot_height_interfaces_comparison(
         filepath="/z2/users/al1007/3fuentes/figures/height_interfaces/"
     )
-
-    print(Physics.global_R0)
-    print(Physics.cp)
-    print(Physics.mu_gradient)
 
     end_time = time.time()
 

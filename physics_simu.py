@@ -69,6 +69,7 @@ class PhysicsSimu:
         boundary_conditions_nml = self.mdat.params["boundaryconditions"]
         return boundary_conditions_nml["outer_flux"]
 
+    # Doesn't work
     @cached_property
     def cp(self) -> float:
         # cp_profile = self.mdat[0].rprof["cp"].array()
@@ -178,6 +179,21 @@ class PhysicsSimu:
         return resolution.get(parameter_name)
 
     @cached_property
+    def initial_R_0(self) -> float:
+        snap = self.mdat[0]
+        temp_profile = snap.rprof["temp"].array()
+        press_profile = snap.rprof["press"].array()
+        grad_temp = np.diff(np.log(temp_profile)) / np.diff(np.log(press_profile))
+        grad_ad = snap.rprof["adiab_grad"].array()[1::]
+        if isinstance(self.mdat.eos, IdealGasMix2):
+            comp_profile = snap.rprof["scalar_1"].array()
+            mu_profile = self.mdat.eos._mu(comp_profile)
+            press_profile = snap.rprof["press"].array()
+            grad_mu = np.diff(np.log(mu_profile)) / np.diff(np.log(press_profile))
+        R_0 = (grad_temp - grad_ad) / grad_mu
+        return round_to_first_nonzero_decimal(np.average(R_0))
+
+    @cached_property
     def pressure_scale_height(self) -> float:
         press_profile = self.mdat[1].rprof["press"].array()
         density_profile = self.mdat[1].rprof["density"].array()
@@ -200,6 +216,20 @@ class PhysicsSimu:
             "The average ratio between the size of the box and the pressure scale height is",
             self.get_geom_parameter("radial_extension") / self.pressure_scale_height,
         )
+
+
+def round_to_first_nonzero_decimal(number):
+    signe = -1 if number < 0 else 1
+    n = abs(number)
+
+    scale = 1
+    while n < 1:
+        n *= 10
+        scale *= 10
+
+    result = signe * round(n) / scale
+
+    return result
 
 
 def main() -> None:

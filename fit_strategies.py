@@ -142,7 +142,7 @@ class Height_Interface_Fit:
         array = snap.rprof["scalar_1"].array()[::-1]
         cum_dib = np.cumsum(array - array[0])
         space = snap.grid.grids[0].cell_points()
-        # to modify
+        # to modify (just to handle the spherical case)
         if abs(space[0]) > 0.1:
             space = space - space[0]
         box_height = space[len(array) - 1]

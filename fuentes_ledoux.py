@@ -90,6 +90,9 @@ class LedouxStateAtHSE(MusicStateOnGrid):
 
     # Solving the coupled ODEs for the temperature, pressure, molecular weight and density profiles
 
+    # Depends on the EOS (here ideal gas), has to be modified
+
+
     @property
     def solve_TP(self) -> tuple[NDArray, NDArray, NDArray, NDArray, NDArray]:
         bc = self.boundary_conditions
